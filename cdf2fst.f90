@@ -1,10 +1,10 @@
 
 !
-! NetCDF to Standard file convertor for ERA40 data
-! It works in conjunction with the grib2cdf converter
+! NetCDF to Standard file convertor
+! It can work in conjunction with the grib2cdf converter
 !
 ! Andrew Ryzhkov and Michel Bourqui
-! Atm and Oc Sci Dep, McGill
+! Atmospheric and Oceanic Sciences Department, McGill University
 !
 
 ! ToDo:
@@ -40,7 +40,8 @@ program cdf2fst
 !	FSTVar( "Zonal wind       ","U ","UU", "knots", 1.94384,   0.00, 0 ),	&	! convert from m/2
 !	FSTVar( "Meridional wind  ","V ","VV", "knots", 1.94384,   0.00, 0 ),	&	! to knots
 !	FSTVar( "Specific humidity","Q ","HU", "kg/kg", 1.00000,   0.00, 0 )	/
-  
+
+! MOZART4 variables
   integer, parameter :: VarCnt = 5
   type (FSTVar) :: Vars(VarCnt)
   data Vars /	&
@@ -85,7 +86,7 @@ program cdf2fst
 
   ! hybrid levels parameters
   logical            :: hybrid = .true.							! .false.
-  integer, parameter :: nkhyb = 28 !60
+  integer, parameter :: nkhyb = 28 !60                                                  ! levels
   real   , parameter :: Pref  = 800.							! reference pressure
   real   , parameter :: Ptop  = 10.0							! top pressure
   real   , parameter :: Rcoef = 1.0							! R coefficient
@@ -153,6 +154,8 @@ program cdf2fst
   outfile = ''
 
   ! Arguments
+  if ( iargc()==0 ) call usage_stop
+  
   i=1
   do while (iargc().ge.i)
        call getarg(i,arg)
@@ -165,21 +168,18 @@ program cdf2fst
            call getarg(i,outfile)
            i=i+1
        case ('-h')
-           print *,'Usage: cdf2fst -i NetCDF_InputFile.cdf -o FST_OutputFile.fst'
-           stop
+           call usage_stop
        end select
   enddo
    
   if ( len_trim(inpfile) == 0 ) then
     print *, 'No input file specified with "-i" argument'
-    print *,'Usage: cdf2fst -i NetCDF_InputFile.cdf -o FST_OutputFile.fst'
-    stop
+    call usage_stop
   end if
 
   if ( len_trim(outfile) == 0 ) then
     print *, 'No output file specified with "-o" argument'
-    print *,'Usage: cdf2fst -i NetCDF_InputFile.cdf -o FST_OutputFile.fst'
-    stop
+    call usage_stop
   end if
 
   ! Program start
@@ -684,5 +684,10 @@ SUBROUTINE TRIDIAGONAL_LINEAR_EQ (L, D, E, C, B, Z)
   END DO
 
 END SUBROUTINE TRIDIAGONAL_LINEAR_EQ
+
+subroutine usage_stop
+  print *,'Usage: cdf2fst -i NetCDF_InputFile.cdf -o FST_OutputFile.fst'
+  stop
+end subroutine usage_stop
 
 end program cdf2fst
