@@ -45,24 +45,24 @@ program cdf2fst
   integer, parameter :: VarCnt = 5
   type (FSTVar) :: Vars(VarCnt)
   data Vars /	&
-	FSTVar( "Surface pressure","PS"  ,"P0"   , "Pa"   , 0.01000,   0.00, 0 ) ,	&               ! Pa => mbar
-	FSTVar( "Hydroxyl radical","OH"  ,"OH"   , "kg/kg", 1.00000,   0.00, 0 ) ,	&
-        FSTVar( "Peroxyl radical" ,"HO2" ,"HO2"  , "kg/kg", 1.00000,   0.00, 0 ) ,      &
-        FSTVar( "Ozone"           ,"O3"  ,"O3"   , "kg/kg", 1.00000,   0.00, 0 ) ,      &  
-        FSTVar( "Nitrogen dioxide","NO2" ,"NO2"  , "kg/kg", 1.00000,   0.00, 0 ) /  
+	FSTVar( "Surface pressure","PS"           ,"P0"   , "Pa"   , 0.01000,   0.00, 0 ) ,	&               ! Pa => mbar
+	FSTVar( "Hydroxyl radical","OH_VMR_inst"  ,"OH"   , "kg/kg", 1.00000,   0.00, 0 ) ,	&
+        FSTVar( "Peroxyl radical" ,"HO2_VMR_inst" ,"HO2"  , "kg/kg", 1.00000,   0.00, 0 ) ,      &
+        FSTVar( "Ozone"           ,"O3_VMR_inst"  ,"O3"   , "kg/kg", 1.00000,   0.00, 0 ) ,      &  
+        FSTVar( "Nitrogen dioxide","NO2_VMR_inst" ,"NO2"  , "kg/kg", 1.00000,   0.00, 0 ) /  
 
   ! FST variables
   character*4 nomvar
   character*1 typvar, grtyp
   character*8 etiket
   
-  integer dateo, datev, deet, npas, ni, nj, nk, npak, datyp, yyyymmdd
-  integer ip1, ip2, ip3
+  integer dateo, datev, deet, npas, ni, nj, nk, npak, datyp, yyyymmdd, gdin
+  integer ip1, ip2, ip3, ip1z, ip2z, ip3z
   integer ig1, ig2, ig3, ig4
 
   ! RPN FST functions externals
-  integer  fnom, fstouv, fclos, fstfrm, newdate, fstecr, write_encode_hyb, hybref_to_ig, read_decode_hyb
-  external fnom, fstouv, fclos, fstfrm, newdate, fstecr, write_encode_hyb, hybref_to_ig, read_decode_hyb
+  integer  fnom, fstouv, fclos, fstfrm, newdate, fstecr, write_encode_hyb, hybref_to_ig, read_decode_hyb, ezqkdef, gdll
+  external fnom, fstouv, fclos, fstfrm, newdate, fstecr, write_encode_hyb, hybref_to_ig, read_decode_hyb, ezqkdef, gdll
 
   ! other variables
   integer ier,i,iun,xi,yi,ii,jj,kk
@@ -73,9 +73,10 @@ program cdf2fst
   character*256, allocatable, dimension(:)     :: dimnames, varnames			! dimensions and variables names
   integer,       allocatable, dimension(:)     :: dimlen, vartype, vardim, varnatt	! dimensions lengths, variables types, variables dimensions, variables attributes
   integer,       allocatable, dimension(:,:)   :: vardimids
-  real   ,       allocatable, dimension(:)     :: timearr				! times
+  real*8 ,       allocatable, dimension(:)     :: timearr				! times
+  real   ,       allocatable, dimension(:)     :: lon, lat                              ! lon, lat arrays
   real   ,       allocatable, dimension(:,:,:) :: datarr, fstarr			! data
-  real   ,       allocatable, dimension(:,:)   :: ps					! surface pressure
+  real   ,       allocatable, dimension(:,:)   :: ps, zlat, zlon					! surface pressure
   character*256 inpfile, outfile, arg, title, datetimestr, datetimestr0
    
   integer stat, ndim, nvar, natt, unlimdid, nicid, ivar
@@ -218,19 +219,19 @@ program cdf2fst
   print '("(",i2,")",a12,":",i8)',((i,trim(dimnames(i)),dimlen(i)),i=1,ndim)
    
   do i=1,ndim
-    if ( trim(dimnames(i)) == 'XLON') then
+    if ( trim(dimnames(i)) == 'lon') then
       ilon = i
       lons = dimlen(i)
     endif
-    if ( trim(dimnames(i)) == 'YLAT') then
+    if ( trim(dimnames(i)) == 'lat') then
       ilat = i
       lats = dimlen(i)
     endif
-    if ( trim(dimnames(i)) == 'LEV') then
+    if ( trim(dimnames(i)) == 'lev') then
       ilev = i
       levs = dimlen(i)
     endif
-    if ( trim(dimnames(i)) == 'TIME') then
+    if ( trim(dimnames(i)) == 'time') then
       itim = i
       tims = dimlen(i)
     endif
@@ -243,6 +244,7 @@ program cdf2fst
   allocate(vardim(nvar))
   allocate(vardimids(nvar,ndim))
   allocate(varnatt(nvar))
+  allocate(lon(lons+1),lat(lats))
   do i=1,nvar
      stat=nf_inq_var(nicid,i,varnames(i),vartype(i),      &
                      vardim(i),vardimids(i,:),varnatt(i))
@@ -255,19 +257,27 @@ program cdf2fst
   !print '(a10,3i8)',((varnames(i),vartype(i),vardim(i),varnatt(i)),i=1,ndim)
   !print '(7i6)', ((vardimids(i,j),j=1,ndim),i=1,nvar)
   do ivar=1, nvar
-    print '("(",i2,")",a12,"[1:",i1,"] depend on: ",8a8)', ivar,trim(varnames(ivar)), vardim(ivar), (trim(dimnames(vardimids(ivar,i))),i=1,vardim(ivar))
+    print '("(",i3,")",a20,"[1:",i1,"] depend on: ",8a8)', ivar,trim(varnames(ivar)), vardim(ivar), (trim(dimnames(vardimids(ivar,i))),i=1,vardim(ivar))
     do i=1,VarCnt
       if ( TRIM(Vars(i)%cdfname) == TRIM(varnames(ivar)) ) Vars(i)%cdfid=ivar	! assign NetCDF variables IDs
     enddo
-    if ( 'HYAM' == TRIM(varnames(ivar)) ) then
+    if ( 'hyam' == TRIM(varnames(ivar)) ) then
       stat=nf_get_var_real ( nicid, ivar, aklay ) 
       call handle_err(stat,"Read aklay variable")
     endif
-    if ( 'HYBM' == TRIM(varnames(ivar)) ) then
+    if ( 'hybm' == TRIM(varnames(ivar)) ) then
       stat=nf_get_var_real ( nicid, ivar, bklay ) 
       call handle_err(stat,"Read bklay variable")
     endif
-    if ( 'TIME' == TRIM(varnames(ivar)) ) then
+    if ( 'lon' == TRIM(varnames(ivar)) ) then
+      stat=nf_get_var_real ( nicid, ivar, lon ) 
+      call handle_err(stat,"Read lon variable")
+    endif
+    if ( 'lat' == TRIM(varnames(ivar)) ) then
+      stat=nf_get_var_real ( nicid, ivar, lat ) 
+      call handle_err(stat,"Read lat variable")
+    endif
+    if ( 'time' == TRIM(varnames(ivar)) ) then
       stat = nf_inq_attlen  ( nicid, ivar, 'units', i )
       call handle_err( stat, "Get time attribute" )
       stat = nf_get_att_text( nicid, ivar, 'units', datetimestr )
@@ -278,8 +288,8 @@ program cdf2fst
       print *,'Short  time: <',trim(datetimestr0),'>'
       read  (datetimestr0,'(i)') yyyymmdd
       print '(a,i8,a)','Integer time: <',yyyymmdd,'>'
-      stat=nf_get_var_real( nicid, ivar, timearr )
-      print *,"Times: ",timearr
+      stat = nf_get_var_double( nicid, ivar, timearr )
+      print '("Times: ",320f10.2)',timearr
       call handle_err(stat,"Read time variable")
     endif
   end do
@@ -288,6 +298,8 @@ program cdf2fst
   bklay = bklay(nl:1:-1)
   print '("HYAM=",32f10.4)',aklay
   print '("HYBM=",32f10.4)',bklay
+  print '("lon(",i3,")=",320f7.2)',lons,lon
+  print '("lat(",i3,")=",320f7.2)',lats,lat
 
 !  print '(a,i3,a,a,a,i3,a)', "Variable#", ivar, " '", trim(varnames(ivar)), "', which has ", vardim(ivar), " dimensions"
 !  print '(a,4i12)', "Namely   : ", (vardimids(ivar,i),i=1,4) 
@@ -319,35 +331,79 @@ program cdf2fst
      stop
   endif
 
+  yyyymmdd = 20050101                                                           ! 732312 - 20050101
+  timearr  = timearr  - 732312                                                  ! change units from "days since 0-0-0" to "days since 2005-01-01"
+
   ier = newdate(dateo, yyyymmdd, 0, 3)						! obtain date
 
-!  nomvar = 'HY'
   ip2 = 0
   ip3 = 0
 
   ! Initialization of the standard file attributes that remain constant for all fields
-  typvar = 'A'
+  typvar = 'P'
   etiket = 'MOZART4'
 
   ip1 = 0
   ip2 = 0
   ip3 = 0
 
-  ni = lons+1
+  ni = lons+1;          lon(lons+1)=lon(lons)+(lon(2)-lon(1))
   nj = lats
   nk = 1
 
-  grtyp  = 'L'								! grid type:	cylindrical equidistant (lat-lon).
-  call cxgaig(grtyp, ig1, ig2, ig3, ig4, -89.5, -179.5, 1., 1.)		! convert grid parameters
+  deet = 0
+  npas = 0
+  dateo = 0
+  
+  datyp =  1
+  npak  = -24   !-32   !-16
+
+  grtyp  = 'L'								! grid type:	'L' - cylindrical equidistant (lat-lon).
+  !call cxgaig(grtyp, ig1, ig2, ig3, ig4, -89.5, -179.5, 1., 1.)		! convert grid parameters
+  !lat(1), lon(1), lat(2)-lat(1), lon(2)-lon(1)
+  !call cxgaig(grtyp, ig1, ig2, ig3, ig4, lat(1), lon(1), lat(2)-lat(1), lon(2)-lon(1) )         ! convert grid parameters
+  call cxgaig(grtyp, ig1, ig2, ig3, ig4, 0., 0., 1., 1. )         ! convert grid parameters
                                                                                         !XLAT0: latitude of the southwest corner of the grid.
                                                                                         !XLON0: longitude of the southwest corner of the grid.
                                                                                         !DLAT: latitudinal grid length in degrees.
                                                                                         !DLON: longitudinal grid length in degrees.
-  datyp =  1
-  npak  = -32	!-16
-
-
-  do time=1, tims							! loop over time
+  ip1z = 4000
+  ip2z = 4001
+  ip3z = 4002
+  
+  nomvar='>>'
+  ier = fstecr(lon, lon,             &
+               npak, iun, dateo, deet, npas,             &
+               ni, 1, 1,                                 &
+               ip1z, ip2z, ip3z, typvar, nomvar, etiket, grtyp,       &
+               ig1, ig2, ig3, ig4, datyp, .false. )
+  
+  nomvar='^^'
+  ier = fstecr(lat, lat,             &
+               npak, iun, dateo, deet, npas,             &
+               1, nj, 1,                                 &
+               ip1z, ip2z, ip3z, typvar, nomvar, etiket, grtyp,       &
+               ig1, ig2, ig3, ig4, datyp, .false. )
+               
+  grtyp  = 'Z'                                                          ! grid type:    'Z' - cartesian grid with a non-constant mesh
+  gdin    = ezqkdef(ni, nj, grtyp, ip1z, ip2z, ip3z, 0, iun)
+  
+  allocate(zlat(ni,nj))
+  allocate(zlon(ni,nj))
+  ier     = gdll(gdin, zlat, zlon)
+  print '("lon(",i3,")=",320f7.2)',lons,zlon(:,1)
+  print '("lat(",i3,")=",320f7.2)',lats,zlat(1,:)
+  nomvar = 'LA'
+  ier=fstecr(zlat, zlat, npak, iun, dateo, deet, npas, ni, nj, nk, &
+       ip1, ip2, ip3, typvar, nomvar, etiket, grtyp, ip1z, ip2z, ip3z, 0, datyp, .false.)
+  nomvar = 'LO'
+  ier=fstecr(zlon, zlon, npak, iun, dateo, deet, npas, ni, nj, nk, &
+       ip1, ip2, ip3, typvar, nomvar, etiket, grtyp, ip1z, ip2z, ip3z, 0, datyp, .false.)
+  deallocate(zlat,zlon)
+  
+  ig1=ip1z; ig2=ip2z; ig3=ip3z
+  
+  do time=1, 2 !tims							! loop over time
 
      print *,"Time: ",time, timearr(time)
 
@@ -480,7 +536,7 @@ program cdf2fst
   ! Close the standard file
   ier = fstfrm(1)
 
-  ! Unlink the unit 1 from the file "ts.fst"
+  ! Unlink the unit 1 from the file 
   ier = fclos(1)
 
   ! Close the file
@@ -500,6 +556,7 @@ program cdf2fst
   deallocate (ps)
 !  deallocate (gz)
   deallocate (timearr)
+  deallocate(lat,lon)
 
   stop 'Ok!'
 
