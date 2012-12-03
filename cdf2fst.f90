@@ -125,6 +125,7 @@ program cdf2fst
   ! and variables
   integer :: k
   real, dimension(nkhyb) :: A,B
+  real :: Pr
 
 ! from the GEM sources - the hybrid_to_pres function:
 ! 	hybm_8(k)= hyb(k) + (1-hyb(k)) * ptop/pref
@@ -257,26 +258,33 @@ program cdf2fst
   !print '(a10,3i8)',((varnames(i),vartype(i),vardim(i),varnatt(i)),i=1,ndim)
   !print '(7i6)', ((vardimids(i,j),j=1,ndim),i=1,nvar)
   do ivar=1, nvar
+  
     print '("(",i3,")",a20,"[1:",i1,"] depend on: ",8a8)', ivar,trim(varnames(ivar)), vardim(ivar), (trim(dimnames(vardimids(ivar,i))),i=1,vardim(ivar))
+    
     do i=1,VarCnt
       if ( TRIM(Vars(i)%cdfname) == TRIM(varnames(ivar)) ) Vars(i)%cdfid=ivar	! assign NetCDF variables IDs
     enddo
+    
     if ( 'hyam' == TRIM(varnames(ivar)) ) then
       stat=nf_get_var_real ( nicid, ivar, aklay ) 
       call handle_err(stat,"Read aklay variable")
     endif
+    
     if ( 'hybm' == TRIM(varnames(ivar)) ) then
       stat=nf_get_var_real ( nicid, ivar, bklay ) 
       call handle_err(stat,"Read bklay variable")
     endif
+    
     if ( 'lon' == TRIM(varnames(ivar)) ) then
       stat=nf_get_var_real ( nicid, ivar, lon ) 
       call handle_err(stat,"Read lon variable")
     endif
+    
     if ( 'lat' == TRIM(varnames(ivar)) ) then
       stat=nf_get_var_real ( nicid, ivar, lat ) 
       call handle_err(stat,"Read lat variable")
     endif
+    
     if ( 'time' == TRIM(varnames(ivar)) ) then
       stat = nf_inq_attlen  ( nicid, ivar, 'units', i )
       call handle_err( stat, "Get time attribute" )
@@ -292,8 +300,16 @@ program cdf2fst
       print '("Times: ",320f10.2)',timearr
       call handle_err(stat,"Read time variable")
     endif
+    
+    if ( 'P0' == TRIM(varnames(ivar)) ) then 
+      stat=nf_get_var_real ( nicid, ivar, Pr ) 
+      call handle_err(stat,"Read P0 variable")
+    endif
+    
   end do
 
+  Pr=Pr/100.                                            ! Pa => mbar
+  print '("Pref=",f10.4)',Pr
   aklay = aklay(nl:1:-1)
   bklay = bklay(nl:1:-1)
   print '("HYAM=",32f10.4)',aklay
@@ -331,11 +347,6 @@ program cdf2fst
      stop
   endif
 
-  yyyymmdd = 20050101                                                           ! 732312 - 20050101
-  timearr  = timearr  - 732312                                                  ! change units from "days since 0-0-0" to "days since 2005-01-01"
-
-  ier = newdate(dateo, yyyymmdd, 0, 3)						! obtain date
-
   ip2 = 0
   ip3 = 0
 
@@ -356,7 +367,7 @@ program cdf2fst
   dateo = 0
   
   datyp =  1
-  npak  = -24   !-32   !-16
+  npak  = -32   !-24   !-32   !-16
 
   grtyp  = 'L'								! grid type:	'L' - cylindrical equidistant (lat-lon).
   !call cxgaig(grtyp, ig1, ig2, ig3, ig4, -89.5, -179.5, 1., 1.)		! convert grid parameters
@@ -401,9 +412,15 @@ program cdf2fst
        ip1, ip2, ip3, typvar, nomvar, etiket, grtyp, ip1z, ip2z, ip3z, 0, datyp, .false.)
   deallocate(zlat,zlon)
   
-  ig1=ip1z; ig2=ip2z; ig3=ip3z
+  ig1=ip1z;  ig2=ip2z;  ig3=ip3z
   
-  do time=1, 2 !tims							! loop over time
+  
+  yyyymmdd = 20050101                                                           ! 732312 - 20050101
+  timearr  = timearr  - 732312.0                                                ! change units from "days since 0-0-0" to "days since 2005-01-01"
+  ier = newdate(dateo, yyyymmdd, 0, 3)                                          ! obtain date
+  datev = dateo
+
+  do time=1, tims							! loop over time
 
      print *,"Time: ",time, timearr(time)
 
@@ -415,10 +432,11 @@ program cdf2fst
       deet = (timearr(2)-timearr(1))*24*3600				! suggest constant time step, in sec
     endif
     npas = timearr(time)*24*3600/deet						! step number
-    IP2 = ((NPAS * DEET+1800)/3600)
-    print *,ip2,deet,npas
+    ip2 = ((npas*deet+1800)/3600)
+    print '("ip2,deet,npas:",3i10)',ip2,deet,npas
                                                                                                                            
-    call incdat(datev, dateo, (deet*npas+1800)/3600 )                                                                      !
+    call incdat(datev, dateo, (deet*npas+1800)/3600 )                                                                      
+    
     if ( time == 1 ) then
       if ( hybrid ) then                                                                                     !
         ier = write_encode_hyb (iun,'HY',ip2,ip3,etiket,datev,	&	! encode and write information about hybrid levels !
@@ -468,7 +486,7 @@ program cdf2fst
 !$omp do firstprivate(lons,lats)
         do xi=1,lons
           do yi=1,lats
-            p    = aklay+bklay*ps(xi,yi)				! NetCDF pressure array
+            p = aklay*Pr+bklay*ps(xi,yi)				! NetCDF pressure array
             if (hybrid) then
               phyb = A    +B    *ps(xi,yi)				! FST pressure array for hybrid
             else
