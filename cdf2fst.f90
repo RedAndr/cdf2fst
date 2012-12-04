@@ -66,8 +66,9 @@ program cdf2fst
 
   ! other variables
   integer ier,i,iun,xi,yi,ii,jj,kk
-  integer,parameter :: nl = 32
-  real work(120, nl), aklay(nl), bklay(nl), p(nl)
+  !integer,parameter :: nl = 32
+  real work(120, 32), pp(32)
+  real, allocatable, dimension (:) :: aklay, bklay
 
   ! NetCDF variables
   character*256, allocatable, dimension(:)     :: dimnames, varnames			! dimensions and variables names
@@ -209,8 +210,8 @@ program cdf2fst
    
   ! Read dimensions information
   print '(a,$)','Read dimensions '
-  allocate(dimnames(ndim))
-  allocate(dimlen(ndim))
+  allocate( dimnames(ndim) )
+  allocate( dimlen  (ndim) )
   do i=1,ndim
      stat=nf_inq_dim(nicid,i,dimnames(i),dimlen(i))
      call handle_err( stat, "Read dimensions" )
@@ -254,6 +255,7 @@ program cdf2fst
   print *,'- Ok.'
    
   allocate(timearr(tims))
+  allocate(aklay(levs),bklay(levs))
 
   !print '(a10,3i8)',((varnames(i),vartype(i),vardim(i),varnatt(i)),i=1,ndim)
   !print '(7i6)', ((vardimids(i,j),j=1,ndim),i=1,nvar)
@@ -310,8 +312,8 @@ program cdf2fst
 
   Pr=Pr/100.                                            ! Pa => mbar
   print '("Pref=",f10.4)',Pr
-  aklay = aklay(nl:1:-1)
-  bklay = bklay(nl:1:-1)
+  aklay = aklay(levs:1:-1)
+  bklay = bklay(levs:1:-1)
   print '("HYAM=",32f10.4)',aklay
   print '("HYBM=",32f10.4)',bklay
   print '("lon(",i3,")=",320f7.2)',lons,lon
@@ -367,7 +369,7 @@ program cdf2fst
   dateo = 0
   
   datyp =  1
-  npak  = -32   !-24   !-32   !-16
+  npak  = -16   !-24   !-32   !-16
 
   grtyp  = 'L'								! grid type:	'L' - cylindrical equidistant (lat-lon).
   !call cxgaig(grtyp, ig1, ig2, ig3, ig4, -89.5, -179.5, 1., 1.)		! convert grid parameters
@@ -378,9 +380,9 @@ program cdf2fst
                                                                                         !XLON0: longitude of the southwest corner of the grid.
                                                                                         !DLAT: latitudinal grid length in degrees.
                                                                                         !DLON: longitudinal grid length in degrees.
-  ip1z = 4000
-  ip2z = 4001
-  ip3z = 4002
+  ip1z = 4200
+  ip2z = 4201
+  ip3z = 4202
   
   nomvar='>>'
   ier = fstecr(lon, lon,             &
@@ -399,33 +401,31 @@ program cdf2fst
   grtyp  = 'Z'                                                          ! grid type:    'Z' - cartesian grid with a non-constant mesh
   gdin    = ezqkdef(ni, nj, grtyp, ip1z, ip2z, ip3z, 0, iun)
   
-  allocate(zlat(ni,nj))
-  allocate(zlon(ni,nj))
-  ier     = gdll(gdin, zlat, zlon)
-  print '("lon(",i3,")=",320f7.2)',lons,zlon(:,1)
-  print '("lat(",i3,")=",320f7.2)',lats,zlat(1,:)
-  nomvar = 'LA'
-  ier=fstecr(zlat, zlat, npak, iun, dateo, deet, npas, ni, nj, nk, &
-       ip1, ip2, ip3, typvar, nomvar, etiket, grtyp, ip1z, ip2z, ip3z, 0, datyp, .false.)
-  nomvar = 'LO'
-  ier=fstecr(zlon, zlon, npak, iun, dateo, deet, npas, ni, nj, nk, &
-       ip1, ip2, ip3, typvar, nomvar, etiket, grtyp, ip1z, ip2z, ip3z, 0, datyp, .false.)
-  deallocate(zlat,zlon)
+!  allocate(zlat(ni,nj))
+!  allocate(zlon(ni,nj))
+!  ier     = gdll(gdin, zlat, zlon)
+!  print '("lon(",i3,")=",320f7.2)',lons,zlon(:,1)
+!  print '("lat(",i3,")=",320f7.2)',lats,zlat(1,:)
+!  nomvar = 'LA'
+!  ier=fstecr(zlat, zlat, npak, iun, dateo, deet, npas, ni, nj, nk, &
+!       ip1, ip2, ip3, typvar, nomvar, etiket, grtyp, ip1z, ip2z, ip3z, 0, datyp, .false.)
+!  nomvar = 'LO'
+!  ier=fstecr(zlon, zlon, npak, iun, dateo, deet, npas, ni, nj, nk, &
+!       ip1, ip2, ip3, typvar, nomvar, etiket, grtyp, ip1z, ip2z, ip3z, 0, datyp, .false.)
+!  deallocate(zlat,zlon)
   
   ig1=ip1z;  ig2=ip2z;  ig3=ip3z
   
   
-  yyyymmdd = 20050101                                                           ! 732312 - 20050101
+  yyyymmdd = 20050101                                                           ! 732312 days = 20050101
   timearr  = timearr  - 732312.0                                                ! change units from "days since 0-0-0" to "days since 2005-01-01"
   ier = newdate(dateo, yyyymmdd, 0, 3)                                          ! obtain date
   datev = dateo
 
   do time=1, tims							! loop over time
 
-     print *,"Time: ",time, timearr(time)
+     print *,"Time: ", time, timearr(time)
 
-!    IP2 = ((NPAS * DEET+1800)/3600)
-    !!ip2  = int(timearr(time))						! time
     if ( tims == 1 ) then
       deet = 6*3600
     else
@@ -433,7 +433,7 @@ program cdf2fst
     endif
     npas = timearr(time)*24*3600/deet						! step number
     ip2 = ((npas*deet+1800)/3600)
-    print '("ip2,deet,npas:",3i10)',ip2,deet,npas
+    !print '("ip2,deet,npas:",3i10)',ip2,deet,npas
                                                                                                                            
     call incdat(datev, dateo, (deet*npas+1800)/3600 )                                                                      
     
@@ -466,7 +466,7 @@ program cdf2fst
       start=(/    1,    1,    1,   time /)  
       count=(/ lons, lats, nlev,   1    /)
 
-      print ('a,a,i,a,i'),"Variable: "//Vars(i)%cdfname," nlev=",nlev," of ",nl
+      print ('a,a32,a,i3'),"Variable: ",Vars(i)%cdfname, " nlev = ",nlev
 
       stat=nf_get_vara_real ( nicid, ivar, start, count, datarr )
       call handle_err(stat,"Read variable: "//Vars(i)%cdfname)
@@ -480,28 +480,31 @@ program cdf2fst
         nlev = 1
       endif  
 
-      if ( nlev==nl-1 ) then
+      if ( nlev/=1 ) then
 
-!$omp parallel private(p,phyb,xx) shared(datarr,aklay,bklay,ps)
-!$omp do firstprivate(lons,lats)
+!$omp parallel private(pp,phyb,xx,ier) shared(datarr,aklay,bklay,ps,pr,hybrid,A,B,hyb,nkhyb,fstarr) 
+!$omp do firstprivate(lons,lats,levs) 
         do xi=1,lons
           do yi=1,lats
-            p = aklay*Pr+bklay*ps(xi,yi)				! NetCDF pressure array
+          
+            pp(1:levs) = aklay*Pr + bklay*ps(xi,yi)				! NetCDF pressure array
             if (hybrid) then
-              phyb = A    +B    *ps(xi,yi)				! FST pressure array for hybrid
+              phyb = A + B*ps(xi,yi)	        			! FST pressure array for hybrid
             else
               phyb = Ptop*(1-hyb) + hyb*ps(xi,yi)			! FST pressure array for sigma, top pressure = 10 mbar
             endif
-            call LinInt ( nl, p, datarr(xi,yi,1:nl), nkhyb, phyb, xx )	! interpolate levels 60=>nkhyb hybrid   by linear interpolation
-!            call CSpInt ( 60, p, datarr(xi,yi,1:60), nkhyb, phyb, xx )	! interpolate levels 60=>nkhyb hybrid   by cubic spline interpolation
-!            call LinInt ( 60, p, datarr(xi,yi,1:60), nkhyb, pres, xx )	! interpolate levels 60=>nkhyb pressure by linear interpolation
-!            call CSpInt ( 60, p, datarr(xi,yi,1:60), nkhyb, pres, xx )	! interpolate levels 60=>nkhyb pressure by cubic spline interpolation
-            fstarr(xi,yi,1:nkhyb) = xx					! new interpolated levels
+            
+            !ier = LinInt ( levs, pp(1:levs), datarr(xi,yi,1:levs),  nkhyb, phyb, xx )	! interpolate levels 60=>nkhyb hybrid   by linear interpolation
+            !!ier = CSpInt ( levs, p, datarr(xi,yi,1:levs), nkhyb, phyb, xx )  ! interpolate levels  levs=>nkhyb hybrid  by cubic spline interpolation
+            !fstarr(xi,yi,1:nkhyb) = xx					! new interpolated levels
+            
+            !ier = LinInt ( levs, pp(1:levs), datarr(xi,yi,1:levs),  nkhyb, phyb, fstarr(xi,yi,1:nkhyb) )
+            ier = CSpInt ( levs, pp(1:levs), datarr(xi,yi,1:levs),  nkhyb, phyb, fstarr(xi,yi,1:nkhyb) )
           end do
         end do
 !$omp end do
 !$omp end parallel
-         nlev = nkhyb
+        nlev = nkhyb
       else
         fstarr(1:lons,1:lats,1:nlev) = datarr(1:lons,1:lats,1:nlev)
       endif
@@ -512,32 +515,32 @@ program cdf2fst
 
         if ( trim(Vars(i)%cdfname) == 'PS' ) then
             call convip ( ip1, hyb(nlev), 1, 2, etiket, .false. )	! surface pressure
-            print *,"Write surface pressure"
+            !print *,"Write surface pressure"
         else
-            print *,"Write "//Vars(i)%cdfname//" as "//Vars(i)%fstname
-            if (hybrid) then
+            !print *,"Write "//Vars(i)%cdfname//" as "//Vars(i)%fstname//" at level ", lev
+            !if (hybrid) then
               call convip ( ip1, hyb(lev), 1, 2, etiket, .false. )	! convert hybrid coordinate level to ip1
-            else
-              call convip ( ip1, hyb(lev), 1, 2, etiket, .false. )	! convert sigma level to ip1
-            endif
+            !else
+            !  call convip ( ip1, hyb(lev), 1, 2, etiket, .false. )	! convert sigma level to ip1
+            !endif
         endif
       
         nomvar = Vars(i)%fstname
 
-        do kk=1,nlev
-          do ii=1,lons+1
-            do jj=lats/2+1,1,-1
-              if ( fstarr(ii,jj,kk)<0. .or. fstarr(ii,jj,kk)>10000. ) then	! missing values
-                fstarr(ii,jj,kk) = fstarr(ii,jj+1,kk)
-              endif
-            enddo
-            do jj=lats/2,lats
-              if ( fstarr(ii,jj,kk)<0. .or. fstarr(ii,jj,kk)>10000. ) then	! missing values
-                fstarr(ii,jj,kk) = fstarr(ii,jj-1,kk)
-              endif
-            enddo
-          enddo
-        enddo
+!        do kk=1,nlev
+!          do ii=1,lons+1
+!            do jj=lats/2+1,1,-1
+!              if ( fstarr(ii,jj,kk)<0. .or. fstarr(ii,jj,kk)>10000. ) then	! missing values
+!                fstarr(ii,jj,kk) = fstarr(ii,jj+1,kk)
+!              endif
+!            enddo
+!            do jj=lats/2,lats
+!              if ( fstarr(ii,jj,kk)<0. .or. fstarr(ii,jj,kk)>10000. ) then	! missing values
+!                fstarr(ii,jj,kk) = fstarr(ii,jj-1,kk)
+!              endif
+!            enddo
+!          enddo
+!        enddo
 
         ! Write a standard file record
         ier = fstecr(fstarr(1:lons+1, 1:lats, lev:lev),	 		&
@@ -575,10 +578,13 @@ program cdf2fst
 !  deallocate (gz)
   deallocate (timearr)
   deallocate(lat,lon)
-
+  deallocate(aklay,bklay)
+  
   stop 'Ok!'
+  
 
 contains
+
 
   subroutine handle_err ( iret, msg )
     implicit none
@@ -594,23 +600,28 @@ contains
       stop
     endif
   end subroutine handle_err
+  
 
-  subroutine LinInt (xn,x,y,xin,xi,yi)
+  pure integer function LinInt (xn,x,y,xin,xi,yi)
   ! Levels linear interpolation
 
   implicit none
+  
+  real, dimension(:), intent (in)       :: x,y,xi
+  integer,            intent (in)       :: xn,xin
+  real, dimension(:), intent (out)      :: yi
+  real, dimension(xn-1)                 :: a,b
+  real                                  :: ai, bi
+  integer                               :: i,j
 
-  real, dimension(:), intent (in)  :: x,y,xi
-  integer,            intent (in)  :: xn,xin
-  real, dimension(:), intent (out) :: yi
-  real, dimension(xn-1)            :: a,b
-  real :: ai, bi
-  integer :: i,j
+    !yi(1:xin) = y(1:xin); return
 
     do i=1, xn-1
       a(i) =   ( y(i)-y(i+1) ) 	           / ( x(i)-x(i+1) )
       b(i) = - ( x(i+1)*y(i)-x(i)*y(i+1) ) / ( x(i)-x(i+1) )
     end do
+    
+    !yi(1:xin) = y(1:xin); !return
     
     do i=1, xin
 
@@ -636,10 +647,13 @@ contains
       endif
 
     end do
+    
+    LinInt = 0
 
-  end subroutine LinInt
+  end function LinInt
+  
 
-  subroutine CSpInt (xn,x,y,xin,xi,yi)
+  pure integer function CSpInt (xn,x,y,xin,xi,yi)
   ! Cubic-spline approximation
 
   implicit none
@@ -689,7 +703,8 @@ contains
 
     end do
 
-  end subroutine CSpInt
+  end function CSpInt
+  
 
 SUBROUTINE CUBIC_SPLINE ( n, XI, FI, P2 )
   ! Function to carry out the cubic-spline approximation
@@ -724,6 +739,7 @@ SUBROUTINE CUBIC_SPLINE ( n, XI, FI, P2 )
   END DO
 
 END SUBROUTINE CUBIC_SPLINE
+
 
 SUBROUTINE TRIDIAGONAL_LINEAR_EQ (L, D, E, C, B, Z)
 ! Function to solve the tridiagonal linear equation set.
@@ -760,9 +776,11 @@ SUBROUTINE TRIDIAGONAL_LINEAR_EQ (L, D, E, C, B, Z)
 
 END SUBROUTINE TRIDIAGONAL_LINEAR_EQ
 
+
 subroutine usage_stop
   print *,'Usage: cdf2fst -i NetCDF_InputFile.cdf -o FST_OutputFile.fst'
   stop
 end subroutine usage_stop
+
 
 end program cdf2fst
