@@ -56,13 +56,14 @@ program cdf2fst
   character*1 typvar, grtyp
   character*8 etiket
   
-  integer dateo, datev, deet, npas, ni, nj, nk, npak, datyp, yyyymmdd, gdin
-  integer ip1, ip2, ip3, ip1z, ip2z, ip3z
-  integer ig1, ig2, ig3, ig4
+  integer :: dateo, datev, deet, npas, ni, nj, nk, npak, datyp, yyyymmdd, gdin
+  integer :: ip1, ip2, ip3, ip1z, ip2z, ip3z
+  integer :: ig1, ig2, ig3, ig4
+  integer, dimension(2) :: fullDate
 
   ! RPN FST functions externals
-  integer  fnom, fstouv, fclos, fstfrm, newdate, fstecr, write_encode_hyb, hybref_to_ig, read_decode_hyb, ezqkdef, gdll
-  external fnom, fstouv, fclos, fstfrm, newdate, fstecr, write_encode_hyb, hybref_to_ig, read_decode_hyb, ezqkdef, gdll
+  integer, external :: fnom, fstouv, fclos, fstfrm, newdate, fstecr, write_encode_hyb, hybref_to_ig, read_decode_hyb, ezqkdef, gdll
+  !external fnom, fstouv, fclos, fstfrm, newdate, fstecr, write_encode_hyb, hybref_to_ig, read_decode_hyb, ezqkdef, gdll
 
   ! other variables
   integer ier,i,iun,xi,yi,ii,jj,kk
@@ -142,6 +143,7 @@ program cdf2fst
   
   ! arguments variables
   integer iargc
+  
   
   if (hybrid) then
     do k=1,nkhyb									! calculate A and B parameters for the hybrid levels
@@ -422,9 +424,7 @@ program cdf2fst
   ier = newdate(dateo, yyyymmdd, 0, 3)                                          ! obtain date
   datev = dateo
 
-  do time=1, tims							! loop over time
-
-     print *,"Time: ", time, timearr(time)
+  do time=1, 10 !tims							! loop over time
 
     if ( tims == 1 ) then
       deet = 6*3600
@@ -436,6 +436,9 @@ program cdf2fst
     !print '("ip2,deet,npas:",3i10)',ip2,deet,npas
                                                                                                                            
     call incdat(datev, dateo, (deet*npas+1800)/3600 )                                                                      
+    ier = newdate ( datev, fullDate(1), fullDate(2), -3 )
+    
+    print ('"Time: ",i6,f8.2," => ",i8.8," ",i8.8'), time, timearr(time), fullDate
     
     if ( time == 1 ) then
       if ( hybrid ) then                                                                                     !
@@ -466,7 +469,7 @@ program cdf2fst
       start=(/    1,    1,    1,   time /)  
       count=(/ lons, lats, nlev,   1    /)
 
-      print ('a,a32,a,i3'),"Variable: ",Vars(i)%cdfname, " nlev = ",nlev
+      print ('a16,"(",i3,")"'),Vars(i)%cdfname,nlev
 
       stat=nf_get_vara_real ( nicid, ivar, start, count, datarr )
       call handle_err(stat,"Read variable: "//Vars(i)%cdfname)
@@ -482,29 +485,30 @@ program cdf2fst
 
       if ( nlev/=1 ) then
 
-!$omp parallel private(pp,phyb,xx,ier) shared(datarr,aklay,bklay,ps,pr,hybrid,A,B,hyb,nkhyb,fstarr) 
-!$omp do firstprivate(lons,lats,levs) 
-        do xi=1,lons
-          do yi=1,lats
-          
-            pp(1:levs) = aklay*Pr + bklay*ps(xi,yi)				! NetCDF pressure array
-            if (hybrid) then
-              phyb = A + B*ps(xi,yi)	        			! FST pressure array for hybrid
-            else
-              phyb = Ptop*(1-hyb) + hyb*ps(xi,yi)			! FST pressure array for sigma, top pressure = 10 mbar
-            endif
-            
-            !ier = LinInt ( levs, pp(1:levs), datarr(xi,yi,1:levs),  nkhyb, phyb, xx )	! interpolate levels 60=>nkhyb hybrid   by linear interpolation
-            !!ier = CSpInt ( levs, p, datarr(xi,yi,1:levs), nkhyb, phyb, xx )  ! interpolate levels  levs=>nkhyb hybrid  by cubic spline interpolation
-            !fstarr(xi,yi,1:nkhyb) = xx					! new interpolated levels
-            
-            !ier = LinInt ( levs, pp(1:levs), datarr(xi,yi,1:levs),  nkhyb, phyb, fstarr(xi,yi,1:nkhyb) )
-            ier = CSpInt ( levs, pp(1:levs), datarr(xi,yi,1:levs),  nkhyb, phyb, fstarr(xi,yi,1:nkhyb) )
+        if (hybrid) then
+!firstprivate(lons,lats,levs) 
+!private(pp,phyb,xx,ier) 
+!shared(datarr,aklay,bklay,ps,pr,hybrid,A,B,hyb,nkhyb,fstarr) 
+!$omp parallel 
+!$omp do 
+          do xi=1,lons
+            do yi=1,lats
+              call CSpInt ( levs , aklay*Pr + bklay*ps(xi,yi)  , datarr(xi,yi,1:levs),           &
+                            nkhyb, A + B*ps(xi,yi)             , fstarr(xi,yi,1:nkhyb)  )
+            end do
           end do
-        end do
 !$omp end do
 !$omp end parallel
+        else
+          do xi=1,lons
+            do yi=1,lats
+              call CSpInt ( levs , aklay*Pr + bklay*ps(xi,yi)  , datarr(xi,yi,1:levs),           &
+                            nkhyb, Ptop*(1-hyb) + hyb*ps(xi,yi), fstarr(xi,yi,1:nkhyb)  )
+            end do
+          end do
+        end if
         nlev = nkhyb
+      
       else
         fstarr(1:lons,1:lats,1:nlev) = datarr(1:lons,1:lats,1:nlev)
       endif
@@ -580,7 +584,7 @@ program cdf2fst
   deallocate(lat,lon)
   deallocate(aklay,bklay)
   
-  stop 'Ok!'
+  stop 'Finish'
   
 
 contains
@@ -653,15 +657,16 @@ contains
   end function LinInt
   
 
-  pure integer function CSpInt (xn,x,y,xin,xi,yi)
+  pure subroutine CSpInt (xn,x,y,xin,xi,yi)
   ! Cubic-spline approximation
 
   implicit none
-
-  real, dimension(:), intent (in) :: x,y,xi
-  integer           , intent (in) :: xn,xin
-  real, dimension(:), intent (out):: yi
-  real, dimension((xn+1))         :: p2
+  
+  real, dimension(xn) , intent (in)  :: x,y
+  integer             , intent (in)  :: xn,xin
+  real, dimension(xin), intent (in)  :: xi
+  real, dimension(xin), intent (out) :: yi
+  real, dimension((xn+1))            :: p2
   real :: xx,dx,a,b,c,d,x1,x2
 
   integer :: i,k
@@ -702,11 +707,11 @@ contains
       yi(xin-i+1) = a*x1**3 + b*x2**3 + c*x1 + d*x2
 
     end do
-
-  end function CSpInt
+    
+  end subroutine CSpInt
   
 
-SUBROUTINE CUBIC_SPLINE ( n, XI, FI, P2 )
+pure SUBROUTINE CUBIC_SPLINE ( n, XI, FI, P2 )
   ! Function to carry out the cubic-spline approximation
   ! with the second-order derivatives returned.
   integer, intent(in) :: n
@@ -741,7 +746,7 @@ SUBROUTINE CUBIC_SPLINE ( n, XI, FI, P2 )
 END SUBROUTINE CUBIC_SPLINE
 
 
-SUBROUTINE TRIDIAGONAL_LINEAR_EQ (L, D, E, C, B, Z)
+pure SUBROUTINE TRIDIAGONAL_LINEAR_EQ (L, D, E, C, B, Z)
 ! Function to solve the tridiagonal linear equation set.
 
   INTEGER, INTENT (IN) :: L
