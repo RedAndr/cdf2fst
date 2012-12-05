@@ -369,7 +369,7 @@ program cdf2fst
   dateo = 0
   
   datyp =  1
-  npak  = -16   !-24   !-32   !-16
+  npak  = -32   !-24   !-32   !-16
 
   grtyp  = 'L'								! grid type:	'L' - cylindrical equidistant (lat-lon).
   !call cxgaig(grtyp, ig1, ig2, ig3, ig4, -89.5, -179.5, 1., 1.)		! convert grid parameters
