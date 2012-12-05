@@ -1,8 +1,8 @@
 
 RCOMPIL = r.compile
 RBUILD  = r.build
-FLAGS   = -O 2 #-openmp #-optf=-Mipa=pure
-LFLAGS  = #-openmp #-optf=-Mipa=pure
+FLAGS   = -O 2 -openmp -optf=-Mipa=pure
+LFLAGS  = -openmp -optf=-Mipa=pure
 
 OBJ    = cdf2fst.o
 OBJ2   = fst_hyb.o

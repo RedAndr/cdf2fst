@@ -9,8 +9,6 @@
 
 ! ToDo:
 !	* conversion units of the fields: GRIB/NetCDF => FST
-!	* write correct date/time
-!	* adjust right grid
 !	* variable parameters store in a file
 !	* level parameters store in a file
 !	* pressure and sigma levels
@@ -45,11 +43,11 @@ program cdf2fst
   integer, parameter :: VarCnt = 5
   type (FSTVar) :: Vars(VarCnt)
   data Vars /	&
-	FSTVar( "Surface pressure","PS"           ,"P0"   , "Pa"   , 0.01000,   0.00, 0 ) ,	&               ! Pa => mbar
-	FSTVar( "Hydroxyl radical","OH_VMR_inst"  ,"OH"   , "kg/kg", 1.00000,   0.00, 0 ) ,	&
-        FSTVar( "Peroxyl radical" ,"HO2_VMR_inst" ,"HO2"  , "kg/kg", 1.00000,   0.00, 0 ) ,      &
-        FSTVar( "Ozone"           ,"O3_VMR_inst"  ,"O3"   , "kg/kg", 1.00000,   0.00, 0 ) ,      &  
-        FSTVar( "Nitrogen dioxide","NO2_VMR_inst" ,"NO2"  , "kg/kg", 1.00000,   0.00, 0 ) /  
+	FSTVar( "Surface pressure","PS"           ,"P0"   , "Pa"   , 0.01000 ,   0.00, 0 ) ,	&               ! Pa => mbar
+	FSTVar( "Hydroxyl radical","OH_VMR_inst"  ,"OH"   , "kg/kg", 0.587148,   0.00, 0 ) ,	&               ! VMR*Moh/Mair => MMR
+        FSTVar( "Peroxyl radical" ,"HO2_VMR_inst" ,"HO2"  , "kg/kg", 1.139499,   0.00, 0 ) ,    &
+        FSTVar( "Ozone"           ,"O3_VMR_inst"  ,"O3"   , "kg/kg", 1.657053,   0.00, 0 ) ,    &  
+        FSTVar( "Nitrogen dioxide","NO2_VMR_inst" ,"NO2"  , "kg/kg", 1.588259,   0.00, 0 ) /  
 
   ! FST variables
   character*4 nomvar
@@ -63,12 +61,10 @@ program cdf2fst
 
   ! RPN FST functions externals
   integer, external :: fnom, fstouv, fclos, fstfrm, newdate, fstecr, write_encode_hyb, hybref_to_ig, read_decode_hyb, ezqkdef, gdll
-  !external fnom, fstouv, fclos, fstfrm, newdate, fstecr, write_encode_hyb, hybref_to_ig, read_decode_hyb, ezqkdef, gdll
 
   ! other variables
   integer ier,i,iun,xi,yi,ii,jj,kk
-  !integer,parameter :: nl = 32
-  real work(120, 32), pp(32)
+  real work(120, 32)
   real, allocatable, dimension (:) :: aklay, bklay
 
   ! NetCDF variables
@@ -93,7 +89,7 @@ program cdf2fst
   real   , parameter :: Pref  = 800.							! reference pressure
   real   , parameter :: Ptop  = 10.0							! top pressure
   real   , parameter :: Rcoef = 1.0							! R coefficient
-  real, dimension(nkhyb) :: hyb, phyb, xx
+  real, dimension(nkhyb) :: hyb, phyb
 
   real, dimension(60) :: hyb60
   data hyb60 /								&		! 60 hybrid levels
@@ -424,7 +420,7 @@ program cdf2fst
   ier = newdate(dateo, yyyymmdd, 0, 3)                                          ! obtain date
   datev = dateo
 
-  do time=1, 10 !tims							! loop over time
+  do time=1, tims							! loop over time
 
     if ( tims == 1 ) then
       deet = 6*3600
