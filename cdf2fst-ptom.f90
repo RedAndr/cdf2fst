@@ -125,14 +125,6 @@ program cdf2fst
     0.302, 0.258, 0.219, 0.185, 0.155, 0.127, 0.101, 0.075, &
     0.051, 0.027, 0.011, 0.000  /
 
-  ! pressure level parameters
-!  real, dimension(nkhyb) :: pres
-!  data pres /						&
-!    1000, 993, 988, 981, 975, 962, 950,                 &
-!     937, 925, 913, 900, 875, 850, 825, 		&
-!     800, 775, 750, 700, 650, 600, 550,			&
-!     500, 400, 300, 200, 100,  50,  10  /
-
   ! and variables
   integer :: k
   real, dimension(nkhyb) :: A,B
@@ -208,11 +200,6 @@ program cdf2fst
   call handle_err( stat, "Read header" )
   print *,'- Ok.'
    
-  !stat = nf_inq_attlen  ( nicid, NF_GLOBAL, 'title', i )
-  !stat = nf_get_att_text( nicid, NF_GLOBAL, 'title', title )
-  !call handle_err( stat, "Get title attribute" )
-  !print *,'Title: <',TRIM(title(1:i)),'>'
-
   print '(a,i8)',     &
      'Dimensions:',ndim, &
      'Variables :',nvar, &
@@ -268,8 +255,6 @@ program cdf2fst
   allocate(timearr(tims))
   allocate(aklay(levs),bklay(levs))
 
-  !print '(a10,3i8)',((varnames(i),vartype(i),vardim(i),varnatt(i)),i=1,ndim)
-  !print '(7i6)', ((vardimids(i,j),j=1,ndim),i=1,nvar)
   do ivar=1, nvar
   
     print '("(",i3,")",a20,"[1:",i1,"] depend on: ",8a8)', ivar,trim(varnames(ivar)), vardim(ivar), (trim(dimnames(vardimids(ivar,i))),i=1,vardim(ivar))
@@ -314,43 +299,22 @@ program cdf2fst
       call handle_err(stat,"Read time variable")
     endif
     
-    !if ( 'P0' == TRIM(varnames(ivar)) ) then 
-    !  stat=nf_get_var_real ( nicid, ivar, Pr ) 
-    !  call handle_err(stat,"Read P0 variable")
-    !endif
-    
   end do
 
-  lat(1:lats) = lat(lats:1:-1)                                         ! reverse lat from 90..-90 to -90..90
-  aklay = aklay(levs:1:-1)*1000.                         ! kPa => mbar
-  bklay = 0     !bklay(levs:1:-1)
+  lat(1:lats) = lat(lats:1:-1)                                          ! reverse lat from 90..-90 to -90..90
+  aklay = aklay(levs:1:-1)*1000.                                        ! kPa => mbar
+  bklay = 0
   do lev=levs-1,1,-1
-    aklay(lev+1) = ( aklay(lev) + aklay(lev+1) )/2.       ! interface to middle
-    !bklay(lev) = ( bklay(lev) + bklay(lev+1) )/2.
+    aklay(lev+1) = ( aklay(lev) + aklay(lev+1) )/2.                     ! interface to middle
   enddo
-!  do lev=levs,1,-1
-!    bklay(lev+1) = bklay(lev)
-!  end do
-!  bklay(1) = 1.0
-!  print '("HYAM=",32f10.4)',aklay(1:levs)
-!  print '("HYBM=",32f10.4)',bklay(1:levs)
+
   print '("lon(",i3,")=",320f7.2)',lons,lon
   print '("lat(",i3,")=",320f7.2)',lats,lat
 
-!  print '(a,i3,a,a,a,i3,a)', "Variable#", ivar, " '", trim(varnames(ivar)), "', which has ", vardim(ivar), " dimensions"
-!  print '(a,4i12)', "Namely   : ", (vardimids(ivar,i),i=1,4) 
-!  print '(a,4i12)', "with dim : ", (dimlen(vardimids(ivar,i)),i=1,4)
-!  print '(a,4a12)', "and names: ", (trim(dimnames(vardimids(ivar,i))),i=1,4)
-   
-!  print *, "Allocate ",dimlen(vardimids(ivar,1))*dimlen(vardimids(ivar,2))*4," bytes"
   allocate( datarr( lons  , lats, levs  ), stat=stat );	if (stat /= 0) stop 'Out of memory'
   allocate( fstarr( lons+1, lats, nkhyb ), stat=stat );	if (stat /= 0) stop 'Out of memory'
-!  allocate( gz    ( lons+1, lats        ), stat=stat );	if (stat /= 0) stop 'Out of memory'
   allocate( ps    ( lons+1, lats        ), stat=stat );	if (stat /= 0) stop 'Out of memory'
    
-!  allocate(fstarr(dimlen(vardimids(ivar,1))+1, dimlen(vardimids(ivar,2))), stat=stat )		! 361 x 181
-!  if (stat /= 0) stop 'Out of memory'
-
   ! Association of the RPN standard file produced by the program with the FORTRAN logical unit 1.
   iun = 1
   ier = fnom(iun, outfile, 'STD+RND', 0)
@@ -390,10 +354,7 @@ program cdf2fst
   npak  = -32   !-24   !-32   !-16
 
   grtyp  = 'L'								! grid type:	'L' - cylindrical equidistant (lat-lon).
-  !call cxgaig(grtyp, ig1, ig2, ig3, ig4, -89.5, -179.5, 1., 1.)		! convert grid parameters
-  !lat(1), lon(1), lat(2)-lat(1), lon(2)-lon(1)
-  !call cxgaig(grtyp, ig1, ig2, ig3, ig4, lat(1), lon(1), lat(2)-lat(1), lon(2)-lon(1) )         ! convert grid parameters
-  call cxgaig(grtyp, ig1, ig2, ig3, ig4, 0., 0., 1., 1. )         ! convert grid parameters
+  call cxgaig(grtyp, ig1, ig2, ig3, ig4, 0., 0., 1., 1. )               ! convert grid parameters
                                                                                         !XLAT0: latitude of the southwest corner of the grid.
                                                                                         !XLON0: longitude of the southwest corner of the grid.
                                                                                         !DLAT: latitudinal grid length in degrees.
@@ -419,38 +380,35 @@ program cdf2fst
   grtyp  = 'Z'                                                          ! grid type:    'Z' - cartesian grid with a non-constant mesh
   gdin    = ezqkdef(ni, nj, grtyp, ip1z, ip2z, ip3z, 0, iun)
   
-  allocate(zlat(ni,nj))
-  allocate(zlon(ni,nj))
-  ier     = gdll(gdin, zlat, zlon)
-  print '("lon(",i3,")=",320f7.2)', lons, zlon(:,1)
-  print '("lat(",i3,")=",320f7.2)', lats, zlat(1,:)
-  nomvar = 'LA'
-  ier=fstecr(zlat, zlat, npak, iun, dateo, deet, npas, ni, nj, nk, &
-       ip1, ip2, ip3, typvar, nomvar, etiket, grtyp, ip1z, ip2z, ip3z, 0, datyp, .false.)
-  nomvar = 'LO'
-  ier=fstecr(zlon, zlon, npak, iun, dateo, deet, npas, ni, nj, nk, &
-       ip1, ip2, ip3, typvar, nomvar, etiket, grtyp, ip1z, ip2z, ip3z, 0, datyp, .false.)
-  deallocate(zlat,zlon)
+  !allocate(zlat(ni,nj),zlon(ni,nj))
+  !ier     = gdll(gdin, zlat, zlon)
+  !print '("lon(",i3,")=",320f7.2)', lons, zlon(:,1)
+  !print '("lat(",i3,")=",320f7.2)', lats, zlat(1,:)
+  !nomvar = 'LA'
+  !ier=fstecr(zlat, zlat, npak, iun, dateo, deet, npas, ni, nj, nk, &
+  !     ip1, ip2, ip3, typvar, nomvar, etiket, grtyp, ip1z, ip2z, ip3z, 0, datyp, .false.)
+  !nomvar = 'LO'
+  !ier=fstecr(zlon, zlon, npak, iun, dateo, deet, npas, ni, nj, nk, &
+  !     ip1, ip2, ip3, typvar, nomvar, etiket, grtyp, ip1z, ip2z, ip3z, 0, datyp, .false.)
+  !deallocate(zlat,zlon)
   
   ig1=ip1z;  ig2=ip2z;  ig3=ip3z
   
+  datyp = 133                                                           ! compressed IEEE float
   
-  !yyyymmdd = 20050101                                                           ! 732312 days = 20050101
-  !timearr  = timearr  - 732312.0                                                ! change units from "days since 0-0-0" to "days since 2005-01-01"
-  ier = newdate(dateo, yyyymmdd, 0, 3)                                          ! obtain date
+  ier = newdate(dateo, yyyymmdd, 0, 3)                                  ! obtain date
   datev = dateo
 
   ! Main cycle over time periods
-  do time=1, 2!tims							! loop over time
+  do time=1, tims							! loop over time
 
     if ( tims == 1 ) then
       deet = 6*3600
     else
       deet = (timearr(2)-timearr(1))*24*3600				! suggest constant time step, in sec
     endif
-    npas = timearr(time)*24*3600/deet						! step number
+    npas = timearr(time)*24*3600/deet					! step number
     ip2 = ((npas*deet+1800)/3600)
-    !print '("ip2,deet,npas:",3i10)',ip2,deet,npas
                                                                                                                            
     call incdat(datev, dateo, (deet*npas+1800)/3600 )                                                                      
     ier = newdate ( datev, fullDate(1), fullDate(2), -3 )
@@ -458,10 +416,9 @@ program cdf2fst
     print ('"Time: ",i6,f8.2," => ",i8.8," ",i8.8'), time, timearr(time), fullDate
     
     if ( time == 1 ) then
-      if ( hybrid ) then                                                                                     !
-        ier = write_encode_hyb (iun,'HY',ip2,ip3,etiket,datev,	&	! encode and write information about hybrid levels !
-                            ptop,pref,rcoef)                                                                                 !
-        !print *,"write_encode_hyb: ",ier                    
+      if ( hybrid ) then
+        ier = write_encode_hyb (iun,'HY',ip2,ip3,etiket,datev,	&	! encode and write information about hybrid levels
+                            ptop,pref,rcoef)
       else
         fstarr(1:lons+1, 1:lats, 1) = Ptop				! top pressure
         ier = fstecr(fstarr(1:lons+1, 1:lats, 1),		&
@@ -470,31 +427,22 @@ program cdf2fst
                     0, 0, 0, typvar, 'PT', etiket, grtyp,	&
                     ig1, ig2, ig3, ig4, datyp, .false. )
       endif
-    endif                                                                                                  !
+    endif
     
     do ivar=1, nvar
-      if ( 'p' == TRIM(varnames(ivar)) ) exit                         ! find cdfid for pressure variable 'p'
+      if ( 'p' == TRIM(varnames(ivar)) ) exit                           ! find cdfid for pressure variable 'p'
     enddo
-!    do i=1, VarCnt                                                      ! loop over variables to find pressure id
-!        if ( trim(Vars(i)%cdfname) == 'p' ) then   
-!            ivar = Vars(i)%cdfid
-!            ii = i
-!        endif
-!    enddo
     
     start=(/    1,    1,    1, time /)  
     count=(/ lons, lats, levs, 1    /)
     stat=nf_get_vara_real ( nicid, ivar, start, count, datarr )
     call handle_err(stat,"Read pressure")
-    fstarr(1:lons,1:lats,1:levs) = datarr(1:lons,1:lats,levs:1:-1)*0.01      ! revert verticaly and convert units
-    fstarr(lons+1,1:lats,1:levs) = fstarr(1,1:lats,1:levs)                                              ! longitude copy: 0=>360
+    fstarr(1:lons,1:lats,1:levs) = datarr(1:lons,1:lats,levs:1:-1)*0.01 ! revert verticaly and convert units
+    fstarr(lons+1,1:lats,1:levs) = fstarr(1,1:lats,1:levs)              ! longitude copy: 0=>360
     
-    ps(1:lons+1,1:lats) = fstarr(1:lons+1,1:lats,1)                                                     ! surface pressure
-    !print *, ps
-    !print *,fstarr(lons+1,1:lats,1)
+    ps(1:lons+1,1:lats) = fstarr(1:lons+1,1:lats,1)                     ! surface pressure
     print *,"Write surface pressure"
-    !print *,ps(lons+1,1:lats)
-    call convip ( ip1, hyb(nlev), 1, 2, etiket, .false. )                                               ! pressure level
+    call convip ( ip1, hyb(nlev), 1, 2, etiket, .false. )               ! pressure level
     ier = fstecr(ps(1:lons+1, lats:1:-1),                          &
                 work, npak, iun, dateo, deet, npas,                &
                 ni, nj, nk,                                        &
@@ -503,52 +451,17 @@ program cdf2fst
     
     ! Calculate B for mid-points from A and P
     do lev=levs,1,-1
-        
-        !print *,ps(1:2,1:2)
-        !ps = datarr(1:lons,1:lats,1)
-        !ps = ps*Vars(i)%factor + Vars(i)%bias                               ! convert units
-        !print *, ps(lons+1,1:lats)
-        !print *, ps(1,1:lats)
-        !ps(lons+1,1:lats) = ps(1,1:lats)                                    ! longitude copy: 0=>360
-        !print *, ps(lons+1,1:lats)
-        bklay(lev) = sum   ( ( dble(fstarr(1:lons,1:lats,lev)) - dble(aklay(lev)) ) / dble(ps(1:lons,1:lats)) ) / dble(lons*lats)
-        
-        !print '(i3,5f14.8)', lev, aklay(lev), &
-        !                          sum   ( ( dble(fstarr(1:lons,1:lats,lev)) - dble(aklay(lev)) ) / dble(ps(1:lons,1:lats)) ) / dble(lons*lats), &
-        !                          minval( ( dble(fstarr(1:lons,1:lats,lev)) - dble(aklay(lev)) ) / dble(ps(1:lons,1:lats)) ),&
-        !                          maxval( ( dble(fstarr(1:lons,1:lats,lev)) - dble(aklay(lev)) ) / dble(ps(1:lons,1:lats)) ),&
-        !                          sum     ( dble(fstarr(1:lons,1:lats,lev))                                                ) / dble(lons*lats)
+        bklay(lev) = sum( ( dble(fstarr(1:lons,1:lats,lev)) - dble(aklay(lev)) ) / dble(ps(1:lons,1:lats)) ) / dble(lons*lats)
     enddo
     
-    print '("HYAM=",32f10.4)',aklay(1:levs)
-    print '("HYBM=",32f10.4)',bklay(1:levs)
+    print '("HYAM=",32f9.4)',aklay(1:levs)
+    print '("HYBM=",32f9.4)',bklay(1:levs)
     
-!    do lev=1,levs
-!      do xi=1,lons
-!        do yi=1,lats
-!          !fstarr(xi,yi,lev) = ( ( aklay(lev) + bklay(lev)*ps(xi,yi) ) + ( aklay(lev+1) + bklay(lev+1)*ps(xi,yi) ) )/2
-!          fstarr(xi,yi,lev) = aklay(lev) + bklay(lev)*ps(xi,yi)
-!        enddo
-!      enddo
-!      call convip ( ip1, hyb(lev), 1, 2, etiket, .false. )               ! level
-!      fstarr(lons+1,1:lats,lev) = fstarr(1,1:lats,lev)
-!      ier = fstecr( fstarr(1:lons+1, lats:1:-1, lev),                  &
-!                    work, npak, iun, dateo, deet, npas,                &
-!                    ni, nj, nk,                                        &
-!                    ip1, ip2, ip3, typvar, 'PP', etiket, grtyp,        &
-!                    ig1, ig2, ig3, ig4, datyp, .false. )
-!    enddo
-
     do i=1, VarCnt							! loop over variables
 
       ivar = Vars(i)%cdfid
       
-      !if ( trim(Vars(i)%cdfname) == 'PS' ) then
-      !  ps   = datarr ( 1:lons, 1:lats, 1 )                     ! surface pressure => ps
-      !  nlev = 1
-      !else
-        nlev = levs
-      !endif
+      nlev = levs
       
       start=(/    1,    1,    1,   time /)  
       count=(/ lons, lats, nlev,   1    /)
@@ -558,22 +471,12 @@ program cdf2fst
       stat=nf_get_vara_real ( nicid, ivar, start, count, datarr )
       call handle_err(stat,"Read variable: "//Vars(i)%cdfname)
 
-!      datarr = cshift ( datarr, -180 )					! shift coordinates to Greenwich (1:lons, 1:lats, 1:lev)
       if ( nlev > 1) datarr = datarr(:,:,nlev:1:-1)			! revert verticaly
       datarr = datarr*Vars(i)%factor + Vars(i)%bias			! convert units
 
-!      if ( trim(Vars(i)%cdfname) == 'p' ) then
-!        ps   = datarr ( 1:lons, 1:lats, 1 )			! surface pressure => ps
-!        !nlev = 1
-!      endif  
-
-      !if ( .false. ) then
       if ( nlev/=1 ) then
 
         if ( hybrid ) then
-!firstprivate(lons,lats,levs) 
-!private(pp,phyb,xx,ier) 
-!shared(datarr,aklay,bklay,ps,pr,hybrid,A,B,hyb,nkhyb,fstarr) 
 !$omp parallel 
 !$omp do 
           do xi=1,lons
@@ -599,79 +502,32 @@ program cdf2fst
         nlev = nkhyb
       
       else
-        fstarr(1:lons,1:lats,1:nlev) = datarr(1:lons,1:lats,1:nlev)
+        fstarr(1:lons,1:lats,1:nlev) = datarr(1:lons,1:lats,1:nlev)     ! only one level in the variable
       endif
 
-      fstarr(lons+1,1:lats,1:nlev) = fstarr(1,1:lats,1:nlev)		! longitude copy: 0=>360
+      fstarr(lons+1,1:lats,1:nlev) = fstarr(1,1:lats,1:nlev)            ! longitude copy: 0=>360
       
       do lev=nlev, 1, -1
-        
-!        if ( trim(Vars(i)%cdfname) == 'p' ) then
-!            print '(i3,5f14.8)', lev, aklay(lev), &
-!                                      sum   ( ( dble(fstarr(1:lons,1:lats,lev)) - dble(aklay(lev)) ) / dble(ps(1:lons,1:lats)) ) / dble(lons*lats), &
-!                                      minval( ( dble(fstarr(1:lons,1:lats,lev)) - dble(aklay(lev)) ) / dble(ps(1:lons,1:lats)) ),&
-!                                      maxval( ( dble(fstarr(1:lons,1:lats,lev)) - dble(aklay(lev)) ) / dble(ps(1:lons,1:lats)) ),&
-!                                      sum     ( dble(fstarr(1:lons,1:lats,lev))                                                ) / dble(lons*lats)
-!        endif
-
-!        if ( trim(Vars(i)%cdfname) == 'p' .and. lev==1 ) then
-!            call convip ( ip1, hyb(nlev), 1, 2, etiket, .false. )	! surface pressure
-!            print *,"Write surface pressure"
-!            ! Write a standard file record
-!            ier = fstecr(fstarr(1:lons+1, lats:1:-1, lev:lev),                   &
-!                        work, npak, iun, dateo, deet, npas,                &
-!                        ni, nj, nk,                                        &
-!                        ip1, ip2, ip3, typvar, 'P0', etiket, grtyp,        &
-!                        ig1, ig2, ig3, ig4, datyp, .false. )
-!            
-!        else
-            !print *,"Write "//Vars(i)%cdfname//" as "//Vars(i)%fstname//" at level ", lev
-            !if (hybrid) then
-              call convip ( ip1, hyb(lev), 1, 2, etiket, .false. )	! convert hybrid coordinate level to ip1
-            !else
-            !  call convip ( ip1, hyb(lev), 1, 2, etiket, .false. )	! convert sigma level to ip1
-            !endif
-!        endif
-      
+        where ( fstarr < 0. ) fstarr = 0.                               ! remove negative values
+        call convip ( ip1, hyb(lev), 1, 2, etiket, .false. )            ! convert hybrid coordinate level to ip1
         nomvar = Vars(i)%fstname
-
-!        do kk=1,nlev
-!          do ii=1,lons+1
-!            do jj=lats/2+1,1,-1
-!              if ( fstarr(ii,jj,kk)<0. .or. fstarr(ii,jj,kk)>10000. ) then	! missing values
-!                fstarr(ii,jj,kk) = fstarr(ii,jj+1,kk)
-!              endif
-!            enddo
-!            do jj=lats/2,lats
-!              if ( fstarr(ii,jj,kk)<0. .or. fstarr(ii,jj,kk)>10000. ) then	! missing values
-!                fstarr(ii,jj,kk) = fstarr(ii,jj-1,kk)
-!              endif
-!            enddo
-!          enddo
-!        enddo
-
-        where ( fstarr < 0. ) fstarr = 0.                                             ! remove negative values
-
-        ! Write a standard file record
-        ier = fstecr(fstarr(1:lons+1, lats:1:-1, lev:lev),	 		&
-                     work, npak, iun, dateo, deet, npas,		&
-                     ni, nj, nk,					&
-                     ip1, ip2, ip3, typvar, nomvar, etiket, grtyp,	&
+        
+        ier = fstecr(fstarr(1:lons+1, lats:1:-1, lev:lev),      &       ! Write a standard file record
+                     work, npak, iun, dateo, deet, npas,        &
+                     ni, nj, nk,                                &
+                     ip1, ip2, ip3, typvar, nomvar, etiket, grtyp,      &
                      ig1, ig2, ig3, ig4, datyp, .false. )
+                     
       enddo	! lev
     
     enddo	! i
 
   enddo		! time
+
+  ier = fstfrm(1)                                                       ! Close the standard file
+  ier = fclos(1)                                                        ! Unlink the unit 1 from the file 
   
-  ! Close the standard file
-  ier = fstfrm(1)
-
-  ! Unlink the unit 1 from the file 
-  ier = fclos(1)
-
-  ! Close the file
-  stat = nf_close( nicid )
+  stat = nf_close( nicid )                                              ! Close the file
   call handle_err( stat, "Close NetCDF file" )
 
   ! Deallocate memory
@@ -685,7 +541,6 @@ program cdf2fst
   deallocate (fstarr)
   deallocate (datarr)
   deallocate (ps)
-!  deallocate (gz)
   deallocate (timearr)
   deallocate(lat,lon)
   deallocate(aklay,bklay)
@@ -724,25 +579,17 @@ contains
   real                                  :: ai, bi
   integer                               :: i,j
 
-    !yi(1:xin) = y(1:xin); return
-
     do i=1, xn-1
       a(i) =   ( y(i)-y(i+1) ) 	           / ( x(i)-x(i+1) )
       b(i) = - ( x(i+1)*y(i)-x(i)*y(i+1) ) / ( x(i)-x(i+1) )
     end do
     
-    !yi(1:xin) = y(1:xin); !return
-    
     do i=1, xin
 
       if ( xi(i)>=x(1) ) then
-!        ai = a(1)
-!        bi = b(1)
         yi(i) = y(1)							! boundary value
       else
         if ( xi(i)<=x(xn) ) then
-!          ai = a(xn-1)
-!          bi = b(xn-1)
            yi(i) = y(xn)						! boundary value
         else
           do j=1, xn-1
