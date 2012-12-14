@@ -40,14 +40,17 @@ program cdf2fst
 !	FSTVar( "Specific humidity","Q ","HU", "kg/kg", 1.00000,   0.00, 0 )	/
 
 ! MOZART4 variables
-  integer, parameter :: VarCnt = 5
+  integer, parameter :: VarCnt = 8
   type (FSTVar) :: Vars(VarCnt)
   data Vars /	&
-	FSTVar( "Surface pressure","PS"           ,"P0"   , "Pa"   , 0.01000 ,   0.00, 0 ) ,	&               ! Pa => mbar
-	FSTVar( "Hydroxyl radical","OH_VMR_inst"  ,"OH"   , "kg/kg", 0.587148,   0.00, 0 ) ,	&               ! VMR*Moh/Mair => MMR
-        FSTVar( "Peroxyl radical" ,"HO2_VMR_inst" ,"HO2"  , "kg/kg", 1.139499,   0.00, 0 ) ,    &
-        FSTVar( "Ozone"           ,"O3_VMR_inst"  ,"O3"   , "kg/kg", 1.657053,   0.00, 0 ) ,    &  
-        FSTVar( "Nitrogen dioxide","NO2_VMR_inst" ,"NO2"  , "kg/kg", 1.588259,   0.00, 0 ) /  
+	FSTVar( "Surface pressure"        ,"PS"           ,"P0"   , "Pa"   , 0.01000 ,   0.00, 0 ) ,   &               ! Pa => mbar
+	FSTVar( "Hydroxyl radical"        ,"OH_VMR_inst"  ,"OH"   , "kg/kg", 0.587148,   0.00, 0 ) ,   &               ! VMR*Moh/Mair => MMR
+        FSTVar( "Peroxyl radical"         ,"HO2_VMR_inst" ,"HO2"  , "kg/kg", 1.139499,   0.00, 0 ) ,   &
+        FSTVar( "Ozone"                   ,"O3_VMR_inst"  ,"O3"   , "kg/kg", 1.657053,   0.00, 0 ) ,   &  
+        FSTVar( "Hydrogen peroxide"       ,"H2O2_VMR_inst","H2O2" , "kg/kg", 1.174297,   0.00, 0 ) ,   &  
+        FSTVar( "Nitrogen dioxide"        ,"NO2_VMR_inst" ,"NO2"  , "kg/kg", 1.588259,   0.00, 0 ) ,   &  
+        FSTVar( "Sulfur dioxide"          ,"SO2_VMR_inst" ,"SO2"  , "kg/kg", 2.211766,   0.00, 0 ) ,   &  
+        FSTVar( "Black carbon hydrofilic" ,"CB2_VMR_inst" ,"SOOT" , "kg/kg", 0.414648,   0.00, 0 )        /  
 
   ! FST variables
   character*4 nomvar
@@ -420,6 +423,7 @@ program cdf2fst
   ier = newdate(dateo, yyyymmdd, 0, 3)                                          ! obtain date
   datev = dateo
 
+  ! Main cycle over time periods
   do time=1, tims							! loop over time
 
     if ( tims == 1 ) then
@@ -496,12 +500,16 @@ program cdf2fst
 !$omp end do
 !$omp end parallel
         else
+!$omp parallel 
+!$omp do 
           do xi=1,lons
             do yi=1,lats
               call CSpInt ( levs , aklay*Pr + bklay*ps(xi,yi)  , datarr(xi,yi,1:levs),           &
                             nkhyb, Ptop*(1-hyb) + hyb*ps(xi,yi), fstarr(xi,yi,1:nkhyb)  )
             end do
           end do
+!$omp end do
+!$omp end parallel
         end if
         nlev = nkhyb
       
@@ -541,6 +549,8 @@ program cdf2fst
 !            enddo
 !          enddo
 !        enddo
+
+        where ( fstarr < 0. ) fstarr = 0.                                             ! remove negative values
 
         ! Write a standard file record
         ier = fstecr(fstarr(1:lons+1, 1:lats, lev:lev),	 		&
