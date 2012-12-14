@@ -56,8 +56,9 @@ program cdf2fst_echam
   integer, parameter :: VarCnt = 2
   type (FSTVar) :: Vars(VarCnt)
   data Vars /   &
-        FSTVar( "Surface pressure", "aps", "P0"   , "Pa"    , 0.01000 ,   0.00, 0 ) ,   &               ! Pa => mbar
-        FSTVar( "Chlorine atom"   , "Cl" , "Cl"   , "kg/kg" , 1.224   ,   0.00, 0 ) /  
+        FSTVar( "Surface pressure" , "aps", "P0"   , "Pa"    , 0.01000 ,   0.00, 0 ) ,   &               ! Pa => mbar
+!        FSTVar( "Chlorine atom"    , "Cl" , "Cl"   , "kg/kg" , 1.224   ,   0.00, 0 ) /  
+        FSTVar( "Chloride monoxide", "ClO" , "ClO"   , "kg/kg" , 1.776   ,   0.00, 0 ) /  
         
   ! FST variables
   character*4 nomvar
@@ -301,7 +302,7 @@ program cdf2fst_echam
       call handle_err( stat, "Get time attribute" )
       ! read initial time and convert them to FST format
       print *,'Long   time: <',datetimestr(1:i),'>'
-      write (datetimestr0,'(a4,2a2)') datetimestr(12:15),datetimestr(17:18),datetimestr(20:21)
+      write (datetimestr0,'(a4,2a2)') datetimestr(11:14),datetimestr(16:17),datetimestr(19:20)
       print *,'Short  time: <',trim(datetimestr0),'>'
       read  (datetimestr0,'(i)') yyyymmdd
       print '(a,i8,a)','Integer time: <',yyyymmdd,'>'
@@ -312,10 +313,12 @@ program cdf2fst_echam
     
   end do
 
-  aklay = aklay(levs:1:-1)
+  lat(1:lats) = lat(lats:1:-1)                                          ! reverse lat from 90..-90 to -90..90
+  aklay = aklay(levs:1:-1)*0.01                                         ! Pa => mbar
+  !aklay = aklay(levs:1:-1)
   bklay = bklay(levs:1:-1)
-  print '("HYAM=",32f10.4)',aklay
-  print '("HYBM=",32f10.4)',bklay
+  print '("HYAM=",100f10.4)',aklay
+  print '("HYBM=",100f10.4)',bklay
   print '("lon(",i3,")=",320f7.2)',lons,lon
   print '("lat(",i3,")=",320f7.2)',lats,lat
 
@@ -416,6 +419,7 @@ program cdf2fst_echam
   
   ig1=ip1z;  ig2=ip2z;  ig3=ip3z
   
+  datyp = 133                                                                   ! compressed float
   
 !  yyyymmdd = 20050101                                                           ! 732312 days = 20050101
 !  timearr  = timearr  - 732312.0                                                ! change units from "days since 0-0-0" to "days since 2005-01-01"
@@ -423,7 +427,7 @@ program cdf2fst_echam
   datev = dateo
 
   ! Main cycle over time periods
-  do time=1, 2!tims							! loop over time
+  do time=1, tims							! loop over time
 
     if ( tims == 1 ) then
       deet = 6*3600
@@ -458,7 +462,7 @@ program cdf2fst_echam
 
       ivar = Vars(i)%cdfid
       
-      if ( trim(Vars(i)%cdfname) == 'PS' ) then
+      if ( trim(Vars(i)%cdfname) == 'aps' ) then
         ps   = datarr ( 1:lons, 1:lats, 1 )                     ! surface pressure => ps
         nlev = 1
       else
@@ -468,7 +472,7 @@ program cdf2fst_echam
       start=(/    1,    1,    1,   time /)  
       count=(/ lons, lats, nlev,   1    /)
 
-      print ('a16,"(",i3,")"'),Vars(i)%cdfname,nlev
+      print ('a16,"(",i2," => ",i2,")"'),Vars(i)%cdfname,nlev,nkhyb
 
       stat=nf_get_vara_real ( nicid, ivar, start, count, datarr )
       call handle_err(stat,"Read variable: "//Vars(i)%cdfname)
@@ -483,6 +487,7 @@ program cdf2fst_echam
       endif  
 
       if ( nlev/=1 ) then
+      !if ( .false. ) then
 
         if (hybrid) then
 !firstprivate(lons,lats,levs) 
@@ -492,8 +497,14 @@ program cdf2fst_echam
 !$omp do 
           do xi=1,lons
             do yi=1,lats
-              call CSpInt ( levs , aklay + bklay*ps(xi,yi)  , datarr(xi,yi,1:levs),           &
-                            nkhyb, A + B*ps(xi,yi)             , fstarr(xi,yi,1:nkhyb)  )
+              !print '("FrP>>>:",100f10.2)',aklay + bklay*ps(xi,yi)
+              !print '("ToP<<<:",100f10.2)',A + B*ps(xi,yi)
+              call CSpInt ( levs , aklay + bklay*ps(xi,yi), datarr(xi,yi,1:levs),           &
+                            nkhyb, A + B*ps(xi,yi)        , fstarr(xi,yi,1:nkhyb)  )
+              !call LinInt ( levs , aklay + bklay*ps(xi,yi), datarr(xi,yi,1:levs),           &
+              !              nkhyb, A + B*ps(xi,yi)        , fstarr(xi,yi,1:nkhyb)  )
+              !print '("FrC>>>:",100es10.2)',datarr(xi,yi,1:levs)
+              !print '("ToC<<<:",100es10.2)',fstarr(xi,yi,1:nkhyb)
             end do
           end do
 !$omp end do
@@ -510,9 +521,11 @@ program cdf2fst_echam
 !$omp end do
 !$omp end parallel
         end if
+        
         nlev = nkhyb
       
       else
+        !nlev = nkhyb
         fstarr(1:lons,1:lats,1:nlev) = datarr(1:lons,1:lats,1:nlev)
       endif
 
@@ -522,37 +535,16 @@ program cdf2fst_echam
 
         if ( trim(Vars(i)%cdfname) == 'aps' ) then
             call convip ( ip1, hyb(nlev), 1, 2, etiket, .false. )	! surface pressure
-            !print *,"Write surface pressure"
         else
-            !print *,"Write "//Vars(i)%cdfname//" as "//Vars(i)%fstname//" at level ", lev
-            !if (hybrid) then
-              call convip ( ip1, hyb(lev), 1, 2, etiket, .false. )	! convert hybrid coordinate level to ip1
-            !else
-            !  call convip ( ip1, hyb(lev), 1, 2, etiket, .false. )	! convert sigma level to ip1
-            !endif
+            call convip ( ip1, hyb(lev), 1, 2, etiket, .false. )	! convert hybrid coordinate level to ip1
         endif
       
         nomvar = Vars(i)%fstname
 
-!        do kk=1,nlev
-!          do ii=1,lons+1
-!            do jj=lats/2+1,1,-1
-!              if ( fstarr(ii,jj,kk)<0. .or. fstarr(ii,jj,kk)>10000. ) then	! missing values
-!                fstarr(ii,jj,kk) = fstarr(ii,jj+1,kk)
-!              endif
-!            enddo
-!            do jj=lats/2,lats
-!              if ( fstarr(ii,jj,kk)<0. .or. fstarr(ii,jj,kk)>10000. ) then	! missing values
-!                fstarr(ii,jj,kk) = fstarr(ii,jj-1,kk)
-!              endif
-!            enddo
-!          enddo
-!        enddo
-
         where ( fstarr < 0. ) fstarr = 0.                                             ! remove negative values
 
         ! Write a standard file record
-        ier = fstecr(fstarr(1:lons+1, 1:lats, lev:lev),	 		&
+        ier = fstecr(fstarr(1:lons+1, lats:1:-1, lev:lev),	 		&
                      WORK, npak, iun, dateo, deet, npas,		&
                      ni, nj, nk,					&
                      ip1, ip2, ip3, typvar, nomvar, etiket, grtyp,	&
@@ -611,41 +603,38 @@ contains
   end subroutine handle_err
   
 
-  pure integer function LinInt (xn,x,y,xin,xi,yi)
+  pure subroutine LinInt (xn,x,y, xin,xi,yi)
   ! Levels linear interpolation
 
   implicit none
   
-  real, dimension(:), intent (in)       :: x,y,xi
-  integer,            intent (in)       :: xn,xin
-  real, dimension(:), intent (out)      :: yi
-  real, dimension(xn-1)                 :: a,b
-  real                                  :: ai, bi
-  integer                               :: i,j
+  integer,              intent (in)  :: xn,xin
+  real, dimension(xn) , intent (in)  :: x,y
+  real, dimension(xin), intent (in)  :: xi
+  real, dimension(xin), intent (out) :: yi
+  real, dimension(xn-1)              :: a,b
+  real                               :: ai, bi
+  integer                            :: i,j
 
-    !yi(1:xin) = y(1:xin); return
-
+              !print '("FrP(",i2,"):", 100f10.2)',xn,x
+              !print '("ToP(",i2,"):", 100f10.2)',xin,xi
+              !print '("FrC(",i2,"):",100es10.2)',xn,y
     do i=1, xn-1
-      a(i) =   ( y(i)-y(i+1) ) 	           / ( x(i)-x(i+1) )
+      a(i) =   (        y(i)-     y(i+1) ) / ( x(i)-x(i+1) )
       b(i) = - ( x(i+1)*y(i)-x(i)*y(i+1) ) / ( x(i)-x(i+1) )
     end do
-    
-    !yi(1:xin) = y(1:xin); !return
     
     do i=1, xin
 
       if ( xi(i)>=x(1) ) then
-!        ai = a(1)
-!        bi = b(1)
         yi(i) = y(1)							! boundary value
       else
         if ( xi(i)<=x(xn) ) then
-!          ai = a(xn-1)
-!          bi = b(xn-1)
            yi(i) = y(xn)						! boundary value
         else
           do j=1, xn-1
             if ( xi(i)<=x(j) .and. xi(i)>=x(j+1) ) then
+              !print *,xi(i),x(j),x(j+1)
               ai = a(j)
               bi = b(j)
               exit
@@ -657,9 +646,7 @@ contains
 
     end do
     
-    LinInt = 0
-
-  end function LinInt
+  end subroutine LinInt
   
 
   pure subroutine CSpInt (xn,x,y,xin,xi,yi)
@@ -675,8 +662,16 @@ contains
   real :: xx,dx,a,b,c,d,x1,x2
 
   integer :: i,k
+  
+  !if ( x(xn-1)==0.0 ) x(xn-1)=0.01                                      ! if top two levels have zero pressure
+
+!              print '("FrP(",i2,"):", 100f10.2)',xn,x
+!              print '("ToP(",i2,"):", 100f10.2)',xin,xi
+!              print '("FrC(",i2,"):",100es10.2)',xn,y
 
     call Cubic_Spline( xn-1, x(xn:1:-1), y(xn:1:-1), p2 )
+    
+!              print '("CSp(",i2,"):",100es10.2)',xn,p2
 
     do i=1, xin
 
@@ -713,25 +708,34 @@ contains
 
     end do
     
+!              print '("ToC(",i2,"):",100es10.2)',xin,yi
+              
   end subroutine CSpInt
   
 
 pure SUBROUTINE CUBIC_SPLINE ( n, XI, FI, P2 )
   ! Function to carry out the cubic-spline approximation
   ! with the second-order derivatives returned.
+  implicit none
   integer, intent(in) :: n
   INTEGER :: I
-  REAL, INTENT (IN) , DIMENSION (:)  :: XI, FI
-  REAL, INTENT (OUT), DIMENSION (:)  :: P2
+  REAL, INTENT (IN) , DIMENSION (n)   :: XI, FI
+  REAL, INTENT (OUT), DIMENSION (n+1) :: P2
   REAL, DIMENSION (n)   :: G, H
   REAL, DIMENSION (n-1) :: D, B, C
 
+  !print '("XI:",100es10.2)',XI
+  !print '("FI:",100es10.2)',FI
+  
   ! Assign the intervals and function differences
   DO I = 1, N
     H(I) = XI(I+1) - XI(I)
     G(I) = FI(I+1) - FI(I)
   END DO
 
+  !print '("H:",100es10.2)',H
+  !print '("G:",100es10.2)',G
+  
   ! Evaluate the coefficient matrix elements
   DO I = 1, N-1
     D(I) = 2*(H(I+1)+H(I))
@@ -741,6 +745,10 @@ pure SUBROUTINE CUBIC_SPLINE ( n, XI, FI, P2 )
 
   ! Obtain the second-order derivatives
   CALL TRIDIAGONAL_LINEAR_EQ (N-1, D, C, C, B, G)
+  !print '("D:",100es10.2)',D
+  !print '("C:",100es10.2)',C
+  !print '("B:",100es10.2)',B
+  !print '("G:",100es10.2)',G
 
   P2(1) = 0
   P2(N+1) = 0
