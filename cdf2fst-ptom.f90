@@ -436,13 +436,13 @@ program cdf2fst
     start=(/    1,    1,    1, time /)  
     count=(/ lons, lats, levs, 1    /)
     stat=nf_get_vara_real ( nicid, ivar, start, count, datarr )
-    call handle_err(stat,"Read pressure")
+    call handle_err(stat,"Read pressure levels")
     fstarr(1:lons,1:lats,1:levs) = datarr(1:lons,1:lats,levs:1:-1)*0.01 ! revert verticaly and convert units
     fstarr(lons+1,1:lats,1:levs) = fstarr(1,1:lats,1:levs)              ! longitude copy: 0=>360
     
     ps(1:lons+1,1:lats) = fstarr(1:lons+1,1:lats,1)                     ! surface pressure
     print *,"Write surface pressure"
-    call convip ( ip1, hyb(nlev), 1, 2, etiket, .false. )               ! pressure level
+    call convip ( ip1, hyb(1), 1, 2, etiket, .false. )                  ! pressure level
     ier = fstecr(ps(1:lons+1, lats:1:-1),                          &
                 work, npak, iun, dateo, deet, npas,                &
                 ni, nj, nk,                                        &
@@ -451,7 +451,7 @@ program cdf2fst
     
     ! Calculate B for mid-points from A and P
     do lev=levs,1,-1
-        bklay(lev) = sum( ( dble(fstarr(1:lons,1:lats,lev)) - dble(aklay(lev)) ) / dble(ps(1:lons,1:lats)) ) / dble(lons*lats)
+        bklay(lev) = real( sum( ( dble(fstarr(1:lons,1:lats,lev)) - dble(aklay(lev)) ) / dble(ps(1:lons,1:lats)) ) / dble(lons*lats) )
     enddo
     
     print '("HYAM=",32f9.4)',aklay(1:levs)
@@ -481,8 +481,8 @@ program cdf2fst
 !$omp do 
           do xi=1,lons
             do yi=1,lats
-              call CSpInt ( levs , aklay + bklay*ps(xi,yi)  , datarr(xi,yi,1:levs),           &
-                            nkhyb, A + B*ps(xi,yi)          , fstarr(xi,yi,1:nkhyb)  )
+              call CSpInt ( levs ,   aklay + bklay*ps(xi,yi),   datarr(xi,yi,1:levs ),           &
+                            nkhyb,   A     + B    *ps(xi,yi),   fstarr(xi,yi,1:nkhyb)  )
             end do
           end do
 !$omp end do
